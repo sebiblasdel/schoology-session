@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Session drop</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ccc; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #eee; --muted: #999; --line: #444; } }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 3rem auto; padding: 0 16px; }
+  input { width: 100%; box-sizing: border-box; padding: .6rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+  button { margin-top: .75rem; padding: .55rem 1rem; font: inherit; border-radius: 6px; border: 1px solid var(--line); cursor: pointer; }
+  p.small { color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<h1>Session drop</h1>
+<p class="small" id="when">Loading…</p>
+<form id="f">
+  <label for="k">Key</label>
+  <input id="k" type="password" autocomplete="off" spellcheck="false" required>
+  <button type="submit">Decrypt and download</button>
+</form>
+<p id="msg" role="status"></p>
+<script>
+  // The file below is AES-256-GCM encrypted; only the key unlocks it, and decryption happens in this browser.
+  const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const b64url = (s) => b64(s.trim().replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.trim().length % 4)) % 4));
+  let env;
+  fetch('session.json', {cache: 'no-store'}).then((r) => r.json()).then((j) => {
+    env = j;
+    document.getElementById('when').textContent = 'Session exported ' + new Date(j.exportedAt).toLocaleString();
+  }).catch(() => { document.getElementById('when').textContent = 'No session published yet.'; });
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('msg');
+    try {
+      const key = await crypto.subtle.importKey('raw', b64url(document.getElementById('k').value), 'AES-GCM', false, ['decrypt']);
+      const plain = await crypto.subtle.decrypt({name: 'AES-GCM', iv: b64(env.iv), additionalData: new TextEncoder().encode(env.aad)}, key, b64(env.ct));
+      const a = Object.assign(document.createElement('a'), {href: URL.createObjectURL(new Blob([plain], {type: 'application/octet-stream'})), download: 'schoology_env'});
+      a.click();
+      msg.textContent = 'Downloaded schoology_env.';
+    } catch {
+      msg.textContent = 'Wrong key.';
+    }
+  });
+</script>
+</body>
+</html>
